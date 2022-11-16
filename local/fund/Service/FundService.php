@@ -23,7 +23,6 @@ class FundService
     {
         $fundDtos = [];
         $funds = $this->dbHelper->getFundList();
-
         foreach ($funds as $fund) {
             $shareCostValue = null;
             foreach ($this->getDatesForCostByDateStart() as $periodKey => $date) {
@@ -34,7 +33,6 @@ class FundService
             }
             $fundDtos[] = $this->createFundDto($fund, $costDtos);
         }
-
         return $fundDtos;
     }
 
@@ -51,7 +49,6 @@ class FundService
                 $shareCostValue = $costDtos[$periodKey]->getShareCost();
             }
         }
-
         return $this->createFundDto($fund, $costDtos);
     }
 
@@ -98,14 +95,18 @@ class FundService
 
     private function createCostDto(?array $cost, ?float $shareCostValue): CostDto
     {
+        $shareCost = $cost['share_cost'] ?? null;
+        $accetsCost = $cost['accets_cost'] ?? null;
+        $costDate = $cost['date'] ? new DateTimeImmutable($cost['date']->format('Y-m-d')) : null;
         $percent = null;
-        if (null !== $shareCostValue) {
-            $percent = ($shareCostValue - $cost['share_cost'] ) / $cost['share_cost'] * 100;
+
+        if (null !== $shareCostValue && null !== $shareCost) {
+            $percent = ($shareCostValue - $shareCost ) / $shareCost* 100;
         }
         return new CostDto(
-            (float) $cost['share_cost'] ?? null,
-                (float) $cost['accets_cost'] ?? null,
-            $cost['date'] ? new DateTimeImmutable($cost['date']->format('Y-m-d')) : null,
+            (float) $shareCost,
+            (float) $accetsCost,
+            $costDate,
             $percent
         );
     }

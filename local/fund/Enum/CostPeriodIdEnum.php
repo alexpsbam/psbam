@@ -25,15 +25,4 @@ class CostPeriodIdEnum
         self::LAST_3_YEAR => '-3 YEAR',
         self::LAST_5_YEAR => '-5 YEAR',
     ];
-
-    public const ALL_KEYS = [
-        self::LAST_DAY,
-        self::LAST_WORK_PERIOD,
-        self::LAST_1_MOUTH,
-        self::LAST_3_MOUTH,
-        self::LAST_6_MOUTH,
-        self::LAST_1_YEAR,
-        self::LAST_3_YEAR,
-        self::LAST_5_YEAR,
-    ];
 }

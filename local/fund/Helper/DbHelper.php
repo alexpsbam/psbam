@@ -57,7 +57,6 @@ class DbHelper
                 ";
             }
         }
-
         return $selectSql . $fromSql . $whereSql;
     }
 
