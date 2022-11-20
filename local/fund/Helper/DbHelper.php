@@ -56,12 +56,10 @@ class DbHelper
         }
 
         $params = [];
-        $params['fl.UF_STUCTURE_ON'] = 1;
         if (false === empty($ufCodeIds)) {
             $params['fl.UF_CODE'] = $ufCodeIds;
         }
         $baseSql = $this->getFundBaseQuerySql($params);
-
         $data = $this->db->query($baseSql)->fetchAll();
 
         $this->setCache($cacheId, $data);
@@ -86,7 +84,7 @@ class DbHelper
         return (bool) $data;
     }
 
-    public function findCostByFundIdAndDate(int $fundId, DateTimeImmutable $date): ?array
+    public function getCostByFundIdAndDate(int $fundId, DateTimeImmutable $date): ?array
     {
         $cacheId = __METHOD__ . '#' . $date->format('Ymd') . '#' . $fundId;
         if (true === $this->hasCache($cacheId)) {
@@ -105,7 +103,7 @@ class DbHelper
         return $data;
     }
 
-    public function findCostByFundIdAndPeriod(int $fundId, DateTimeImmutable $dateFrom, DateTimeImmutable $dateTill): array
+    public function getCostByFundIdAndPeriod(int $fundId, DateTimeImmutable $dateFrom, DateTimeImmutable $dateTill): array
     {
         $cacheId = __METHOD__ . '#'  . $fundId . '#' . $dateFrom->format('Ymd') . '#' . $dateTill->format('Ymd');
         if (true === $this->hasCache($cacheId)) {
@@ -115,6 +113,23 @@ class DbHelper
             'fc.UF_FUND_ID' => $fundId,
             CostFieldNameEnum::FROM_DATE => $dateFrom,
             CostFieldNameEnum::TILL_DATE => $dateTill,
+        ]);
+
+        $data = $this->db->query($baseSql)->fetchAll();
+        $this->setCache($cacheId, $data);
+        return $data;
+    }
+
+    public function getStructureByFundId(int $fundId): array
+    {
+        $cacheId = __METHOD__ . '#'  . $fundId;
+        if (true === $this->hasCache($cacheId)) {
+            return $this->getCache();
+        }
+
+        $baseSql = $this->getStructreBaseQuerySql([
+            'fs.UF_FUND_ID' => $fundId,
+            'fs.UF_TYPE_ID' => [1, 2],
         ]);
 
         $data = $this->db->query($baseSql)->fetchAll();
@@ -166,6 +181,29 @@ class DbHelper
         return $selectSql . $fromSql . $whereSql . $orderSql;
     }
 
+    private function getStructreBaseQuerySql(array $values = []): string
+    {
+        $selectSql = "
+            SELECT 
+                fs.UF_FUND_ID as fund_id, 
+                fs.UF_TITLE as title,
+                fs.UF_TYPE_ID as type_id,
+                (fs.UF_VALUE) as value
+        ";
+        $fromSql = "
+            FROM 
+                   fund_structure fs
+        ";
+
+        $whereSql = $this->createSqlWhere($values);
+
+        $orderSql = "
+            ORDER BY fs.UF_VALUE DESC
+        ";
+
+        return $selectSql . $fromSql . $whereSql . $orderSql;
+    }
+
     private function createSqlWhere(array $values): string
     {
         $whereSql = self::SQL_WHERE;
@@ -181,10 +219,16 @@ class DbHelper
                 ";
             }
             if (is_array($value)) {
-                $values = implode(',', $value);
-                $whereSql .= "
-                    AND {$name} IN ({$values})
-                ";
+                $whereSql .= " AND {$name} IN (";
+                foreach ($value as $val) {
+                    if (0 !== (int) $val) {
+                        $whereSql .= ",{$val}";
+                    } else {
+                        $whereSql .= ",'{$val}'";
+                    }
+                }
+                $whereSql .= ")";
+                $whereSql = str_replace('(,', '(', $whereSql);
             }
 
             if ($value instanceof DateTimeImmutable) {

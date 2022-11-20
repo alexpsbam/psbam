@@ -2,18 +2,30 @@
 require($_SERVER["DOCUMENT_ROOT"]."/bitrix/modules/main/include/prolog_before.php");
 //require($_SERVER["DOCUMENT_ROOT"]."/bitrix/header.php");
 use fund\Dto\FundDto;
-use fund\Enum\CostColumnEnum;
 use fund\Enum\CostPeriodIdEnum;
 use fund\Helper\DateHelper;
 use fund\Helper\DbHelper;
 use fund\Service\FundService;
+
+CModule::IncludeModule("iblock");
+
+$arSelect = ["ID", "IBLOCK_ID", "PROPERTY_CODE"];
+$arFilter = ["IBLOCK_ID" => 10, "ACTIVE"=> "Y"];
+$res = CIBlockElement::GetList(Array(), $arFilter, false, [], $arSelect);
+$fundCodeAll = [];
+while ($ob = $res->GetNextElement()) {
+    $arFields = $ob->GetFields();
+    if (true === isset($arFields['PROPERTY_CODE_VALUE'])) {
+        $fundCodeAll[$arFields['PROPERTY_CODE_VALUE']] = $arFields['PROPERTY_CODE_VALUE'];
+    }
+}
 
 $fundService = (new FundService(new DbHelper('capitalig')));
 $dateHelper = new DateHelper();
 /**
  * @var FundDto[] $fundDtos
  */
-$fundDtos = $fundService->getList([414, 411, 416, 417, 415, 406, 407, 408, 825, 826, 1000]);
+$fundDtos = $fundService->getList([413]);
 
 /**
  * DateTimeImmutable[] $dateListByKey
@@ -21,16 +33,26 @@ $fundDtos = $fundService->getList([414, 411, 416, 417, 415, 406, 407, 408, 825, 
 $dateListByKey = $fundService->getDatesForCost();
 echo '<pre>';
 foreach ($fundDtos as $fundDto) {
-    $costs = [];
+    $costs = $structures = [];
     $datePercentStart = null;
     foreach ($fundDto->getCosts() as $periodId => $costDto) {
         if (CostPeriodIdEnum::LAST_WORK_PERIOD === $periodId) {
             $datePercentStart = $costDto->getDate()->format('Y-m-d');
         }
-        $costs[$costDto->getDate()->format('Y-m-d')] = [
+        $costs[$periodId] = [
                 'shareCost' => $costDto->getShareCost(),
                 'assetCost' => $costDto->getAccetsCost(),
-                'percent' => $costDto->getPercent()
+                'percent' => $costDto->getPercent(),
+                'date' => $costDto->getDate() ? $costDto->getDate()->format('Y-m-d') : null
+        ];
+    }
+
+    foreach ($fundDto->getStructures() as $structureDto) {
+        $structures[] = [
+            'value' => $structureDto->getValue(),
+            'sumValue' => $structureDto->getSumValue(),
+            'type' => $structureDto->getType(),
+            'percent' => $structureDto->getPercent()
         ];
     }
     var_dump([
@@ -39,6 +61,7 @@ foreach ($fundDtos as $fundDto) {
             'desc' => $fundDto->getDescription(),
             'dateStartForCalcPercent' => $datePercentStart,
             'costs' => $costs,
+            'structures' => $structures,
         ]
     );
 }
