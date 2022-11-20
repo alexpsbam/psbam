@@ -7,51 +7,136 @@ use DateTimeImmutable;
 use fund\Dto\CostDto;
 use fund\Dto\FundDto;
 use fund\Enum\CostPeriodIdEnum;
-use fund\Enum\LastWorkDaysEnum;
+use fund\Helper\DateHelper;
 use fund\Helper\DbHelper;
 
 class FundService
 {
     private DbHelper $dbHelper;
+    private DateHelper $dateHelper;
 
     public function __construct(DbHelper $dbHelper)
     {
         $this->dbHelper = $dbHelper;
+        $this->dateHelper = new DateHelper();
     }
 
-    public function getList(): array
+    /**
+     * @param int[] $ufCodeIds
+     *
+     * @return FundDto[]
+     */
+    public function getList(array $ufCodeIds = [], $withCosts = true): array
     {
         $fundDtos = [];
-        $funds = $this->dbHelper->getFundList();
+        $funds = $this->dbHelper->getFundList($ufCodeIds);
         foreach ($funds as $fund) {
-            $shareCostValue = null;
-            foreach ($this->getDatesForCostByDateStart() as $periodKey => $date) {
-                $costDtos[$periodKey] = $this->findCostByFundIdAndDate((int) $fund['id'], $date, $shareCostValue);
-                if (CostPeriodIdEnum::LAST_WORK_PERIOD === $periodKey) {
-                    $shareCostValue = $costDtos[$periodKey]->getShareCost();
-                }
+            $costDtos = [];
+            if (true === $withCosts) {
+                $costDtos = $this->getCostDtoByFundIdAndDate((int) $fund['id']);
             }
             $fundDtos[] = $this->createFundDto($fund, $costDtos);
         }
         return $fundDtos;
     }
 
-    public function getFundById(int $id): ?FundDto
+    public function getFundById(int $id, bool $withCosts = true): ?FundDto
     {
         $fund = $this->dbHelper->getFundById($id);
         if (null === $fund) {
             return $fund;
         }
-        $shareCostValue = null;
-        foreach ($this->getDatesForCostByDateStart() as $periodKey => $date) {
-            $costDtos[$periodKey] = $this->findCostByFundIdAndDate((int) $fund['id'], $date, $shareCostValue);
-            if (CostPeriodIdEnum::LAST_WORK_PERIOD === $periodKey) {
-                $shareCostValue = $costDtos[$periodKey]->getShareCost();
-            }
+        $costDtos = [];
+        if (true === $withCosts) {
+            $costDtos = $this->getCostDtoByFundIdAndDate($id);
         }
         return $this->createFundDto($fund, $costDtos);
     }
 
+    /**
+     * @return CostDto[]
+     */
+    public function getCostByFundIdAndPeriod(
+        int $fundId,
+        DateTimeImmutable $dateFrom,
+        DateTimeImmutable $dateTill
+    ): array {
+        $costDtos = [];
+        $costs = $this->dbHelper->findCostByFundIdAndPeriod($fundId, $dateFrom, $dateTill);
+        foreach ($costs as $cost) {
+            $costDtos[] = $this->createCostDto($cost, null);
+        }
+        return $costDtos;
+    }
+
+    /**
+     * @return CostDto[]
+     */
+    public function getCostByFundIdAndPeriodId(
+        int $fundId,
+        int $periodId,
+        DateTimeImmutable $dateTill
+    ): array {
+        $costDtos = [];
+        $dateFrom = $this->dateHelper->getDateTillByPeriodId($periodId, $dateTill);
+        $costs = $this->dbHelper->findCostByFundIdAndPeriod($fundId, $dateFrom, $dateTill);
+        foreach ($costs as $cost) {
+            $costDtos[] = $this->createCostDto($cost, null);
+        }
+        return $costDtos;
+    }
+
+    /**
+     * @return DateTimeImmutable[]
+     */
+    public function getDatesForCost(): array
+    {
+        $dateStart = $this->getLastWorkDate(new DateTimeImmutable());
+        return $this->dateHelper->getDatesForCost($dateStart);
+    }
+
+    /**
+     * @return CostDto[]
+     */
+    private function getCostDtoByFundIdAndDate(int $fundId): array
+    {
+        $costDtos = [];
+        $shareCostValue = null;
+        foreach ($this->getDatesForCost() as $periodKey => $date) {
+            $costDtos[$periodKey] = $this->findCostByFundIdAndDate($fundId, $date, $shareCostValue);
+            $shareCostValue = $this->getShareCostValue($periodKey, $costDtos[$periodKey], $shareCostValue);
+        }
+        return $costDtos;
+    }
+
+    private function getShareCostValue(int $periodKey, CostDto $costDto, ?float $shareCostValue): ?float
+    {
+        if (CostPeriodIdEnum::LAST_WORK_PERIOD === $periodKey) {
+            return $costDto->getShareCost();
+        }
+        return $shareCostValue;
+    }
+
+    private function getLastWorkDate(DateTimeImmutable $date): DateTimeImmutable
+    {
+        $date = $this->dateHelper->getLastWorkDataByDate($date);
+        if (true === $this->dbHelper->hasCostByDate($date)) {
+            return $date;
+        }
+        $newDateTime = $date->modify('-1 month');
+        return $this->getLastWorkDate($newDateTime);
+    }
+
+    private function findCostByFundIdAndDate(int $fundId, DateTimeImmutable $date, ?float $shareCostValue): CostDto
+    {
+        $cost = $this->dbHelper->findCostByFundIdAndDate($fundId, $date);
+        return $this->createCostDto($cost, $shareCostValue);
+    }
+
+    /**
+     * @param mixed[] $fund
+     * @param CostDto[] $costDtos
+     */
     private function createFundDto(array $fund, array $costDtos): FundDto
     {
         return new FundDto(
@@ -63,36 +148,9 @@ class FundService
         );
     }
 
-    private function getLastWorkData(DateTimeImmutable $date): DateTimeImmutable
-    {
-        $monthLastValue = (int) $date->format('m');
-        $yearLastValue = (int) $date->format('Y');
-        $dateString = LastWorkDaysEnum::LAST_WORK_DAYS[$yearLastValue][$monthLastValue];
-        if (true === $this->dbHelper->hasCostByDate(new DateTimeImmutable($dateString))) {
-            return new DateTimeImmutable($dateString);
-        }
-        $newDateTime = $date->modify('-1 month');
-        return $this->getLastWorkData($newDateTime);
-
-    }
-
-    public function getDatesForCostByDateStart(): array
-    {
-        $dateStart = $this->getLastWorkData(new DateTimeImmutable());
-        $dates[CostPeriodIdEnum::LAST_DAY] = new DateTimeImmutable();
-        $dates[CostPeriodIdEnum::LAST_WORK_PERIOD] = $dateStart;
-        foreach (CostPeriodIdEnum::PERIODS as $key => $interval) {
-            $dates[$key] = $dateStart->modify($interval);
-        }
-        return $dates;
-    }
-
-    private function findCostByFundIdAndDate(int $fundId, DateTimeImmutable $date, ?float $shareCostValue): CostDto
-    {
-        $cost = $this->dbHelper->findCostByFundIdAndDate($fundId, $date);
-        return $this->createCostDto($cost, $shareCostValue);
-    }
-
+    /**
+     * @param mixed[]|null $cost
+     */
     private function createCostDto(?array $cost, ?float $shareCostValue): CostDto
     {
         $shareCost = $cost['share_cost'] ?? null;
@@ -101,7 +159,7 @@ class FundService
         $percent = null;
 
         if (null !== $shareCostValue && null !== $shareCost) {
-            $percent = ($shareCostValue - $shareCost ) / $shareCost* 100;
+            $percent = ($shareCostValue - $shareCost ) / $shareCost * 100;
         }
         return new CostDto(
             (float) $shareCost,

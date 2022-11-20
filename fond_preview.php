@@ -4,60 +4,57 @@ require($_SERVER["DOCUMENT_ROOT"]."/bitrix/modules/main/include/prolog_before.ph
 use fund\Dto\FundDto;
 use fund\Enum\CostColumnEnum;
 use fund\Enum\CostPeriodIdEnum;
+use fund\Helper\DateHelper;
 use fund\Helper\DbHelper;
 use fund\Service\FundService;
 
 $fundService = (new FundService(new DbHelper('capitalig')));
-
+$dateHelper = new DateHelper();
 /**
  * @var FundDto[] $fundDtos
  */
-$fundDtos = $fundService->getList();
+$fundDtos = $fundService->getList([414, 411, 416, 417, 415, 406, 407, 408, 825, 826, 1000]);
 
 /**
  * DateTimeImmutable[] $dateListByKey
  */
-$dateListByKey = $fundService->getDatesForCostByDateStart()
-?>
-<table>
-    <tbody>
-    <tr>
-<?php
-foreach (CostColumnEnum::LIST as $keyColumn => $text) {
-?>
-    <td>
-    <?=$text?>
-    <? if (
-            true === in_array($keyColumn, [CostPeriodIdEnum::LAST_WORK_PERIOD, CostPeriodIdEnum::LAST_DAY])
-            && true === isset($dateListByKey[$keyColumn])
-    ) {
-        echo $dateListByKey[$keyColumn]->format('Y-m-d');
+$dateListByKey = $fundService->getDatesForCost();
+echo '<pre>';
+foreach ($fundDtos as $fundDto) {
+    $costs = [];
+    $datePercentStart = null;
+    foreach ($fundDto->getCosts() as $periodId => $costDto) {
+        if (CostPeriodIdEnum::LAST_WORK_PERIOD === $periodId) {
+            $datePercentStart = $costDto->getDate()->format('Y-m-d');
+        }
+        $costs[$costDto->getDate()->format('Y-m-d')] = [
+                'shareCost' => $costDto->getShareCost(),
+                'assetCost' => $costDto->getAccetsCost(),
+                'percent' => $costDto->getPercent()
+        ];
     }
-    foreach ($fundDtos as $fundDto) {
-        if (CostColumnEnum::NAME_FUND === $keyColumn) {
-            echo '<br>';
-            echo $fundDto->getName() . '<br>';
-            echo $fundDto->getDescription() . '<br>';
-            echo '-----<br/>';
-        }
-
-        if (true === key_exists($keyColumn, CostPeriodIdEnum::PERIODS)) {
-            echo '<br>';
-            echo number_format($fundDto->getCosts()[$keyColumn]->getPercent(), 2, '.', ',') . '%<br>';
-            echo '-----<br/>';
-        }
-
-        if (true === in_array($keyColumn, [CostPeriodIdEnum::LAST_WORK_PERIOD, CostPeriodIdEnum::LAST_DAY])) {
-            echo '<br>';
-            echo $fundDto->getCosts()[$keyColumn]->getShareCost() . '<br>';
-            echo '-----<br/>';
-        }
-    }
-    ?>
-
-    </td>
-<?php
+    var_dump([
+            'id' => $fundDto->getFundId(),
+            'name' => $fundDto->getName(),
+            'desc' => $fundDto->getDescription(),
+            'dateStartForCalcPercent' => $datePercentStart,
+            'costs' => $costs,
+        ]
+    );
 }
-?>
-    </tbody>
-</table>
+
+
+foreach ($fundDtos as $fundDto) {
+    $shareCosts = $assetCosts = [];
+    $costDtos = $fundService->getCostByFundIdAndPeriod($fundDto->getFundId(), new DateTimeImmutable('-3 month'), new DateTimeImmutable());
+
+    foreach ($costDtos as $costDto) {
+        $shareCosts[$costDto->getDate()->format('Y-m-d')] = $costDto->getShareCost();
+        $assetCosts[$costDto->getDate()->format('Y-m-d')] = $costDto->getAccetsCost();
+    }
+    var_dump([
+        'fundName' => $fundDto->getName(),
+        'shareCosts' => $shareCosts,
+        'assetCosts' => $assetCosts,
+    ]);
+}
