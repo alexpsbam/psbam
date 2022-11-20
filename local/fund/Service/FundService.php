@@ -13,7 +13,7 @@ use fund\Helper\DbHelper;
 
 class FundService
 {
-    private const DAYS_DIFF_LIMIT = 100;
+    private const DAYS_DIFF_LIMIT = 1000;
 
     private DbHelper $dbHelper;
     private DateHelper $dateHelper;
