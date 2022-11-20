@@ -3,17 +3,21 @@ declare(strict_types=1);
 
 namespace fund\Service;
 
+use Bitrix\Main\DB\Exception;
 use DateTimeImmutable;
 use fund\Dto\CostDto;
 use fund\Dto\FundDto;
 use fund\Dto\StructureDto;
 use fund\Enum\CostPeriodIdEnum;
+use fund\Enum\Db\GroupCostEnum;
 use fund\Helper\DateHelper;
 use fund\Helper\DbHelper;
 
 class FundService
 {
-    private const DAYS_DIFF_LIMIT = 1000;
+    private const DAYS_DIFF_LIMIT_WEEK = 100;
+    private const DAYS_DIFF_LIMIT_MONTH = 365 * 2;
+    private const DAYS_MAX_LIMIT = 370 * 5;
 
     private DbHelper $dbHelper;
     private DateHelper $dateHelper;
@@ -73,21 +77,31 @@ class FundService
         DateTimeImmutable $dateTill
     ): array {
         $costDtos = [];
-        $isNeedCostGroup = $this->isNeedCostGroup($dateFrom, $dateTill);
-        $costs = $this->dbHelper->getCostByFundIdAndPeriod($fundId, $dateFrom, $dateTill, $isNeedCostGroup);
+        $costGroupEnumValue = $this->getGroupCostsEnumValueByInterval($dateFrom, $dateTill);
+        $costs = $this->dbHelper->getCostByFundIdAndPeriod($fundId, $dateFrom, $dateTill, $costGroupEnumValue);
         foreach ($costs as $cost) {
             $costDtos[] = $this->createCostDto($cost, null, null);
         }
         return $costDtos;
     }
 
-    private function isNeedCostGroup(DateTimeImmutable $dateFrom, DateTimeImmutable $dateTill): bool
+    private function getGroupCostsEnumValueByInterval(DateTimeImmutable $dateFrom, DateTimeImmutable $dateTill): int
     {
         $days = abs(date_diff($dateFrom, $dateTill)->days);
-        if (self::DAYS_DIFF_LIMIT < $days) {
-            return true;
+
+        if (self::DAYS_MAX_LIMIT < $days) {
+            throw new Exception('Huge date interval. Decrease');
         }
-        return false;
+
+        if (self::DAYS_DIFF_LIMIT_WEEK < $days) {
+            return GroupCostEnum::GROUP_BY_WEEK;
+        }
+
+        if (self::DAYS_DIFF_LIMIT_MONTH < $days) {
+            return GroupCostEnum::GROUP_BY_MONTH;
+        }
+
+        return GroupCostEnum::WITHOUT_GROUP_BY;
     }
 
     /**
@@ -197,6 +211,11 @@ class FundService
         $shareCost = $cost['share_cost'] ?? null;
         $accetsCost = $cost['accets_cost'] ?? null;
         $costDate = $cost['date'] ? new DateTimeImmutable($cost['date']->format('Y-m-d')) : null;
+
+        if (null === $costDate && isset($cost['year'], $cost['month'])) {
+            $costDate = new DateTimeImmutable($cost['year'] . '-' . $cost['month'] . '-' . '01');
+        }
+
         $percent = null;
 
         if (null !== $shareCostValue && null !== $shareCost) {

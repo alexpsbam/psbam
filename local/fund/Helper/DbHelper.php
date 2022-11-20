@@ -8,6 +8,7 @@ use Bitrix\Main\Data\Cache;
 use Bitrix\Main\DB\Connection;
 use DateTimeImmutable;
 use fund\Enum\Db\CostFieldNameEnum;
+use fund\Enum\Db\GroupCostEnum;
 
 class DbHelper
 {
@@ -96,7 +97,7 @@ class DbHelper
                 'fc.UF_FUND_ID' => $fundId,
                 CostFieldNameEnum::TILL_DATE => $date,
             ],
-            false
+            GroupCostEnum::WITHOUT_GROUP_BY
         );
         $data = $this->db->query($baseSql, $limit = 1)->fetch();
         if (true === empty($data)) {
@@ -106,9 +107,9 @@ class DbHelper
         return $data;
     }
 
-    public function getCostByFundIdAndPeriod(int $fundId, DateTimeImmutable $dateFrom, DateTimeImmutable $dateTill, bool $isNeedCostGroup = false): array
+    public function getCostByFundIdAndPeriod(int $fundId, DateTimeImmutable $dateFrom, DateTimeImmutable $dateTill, int $costGroupEnumValue = 1): array
     {
-        $cacheId = __METHOD__ . '#'  . $fundId . '#' . $dateFrom->format('Ymd') . '#' . $dateTill->format('Ymd') . '#' . (int) $isNeedCostGroup;
+        $cacheId = __METHOD__ . '#'  . $fundId . '#' . $dateFrom->format('Ymd') . '#' . $dateTill->format('Ymd') . '#' . $costGroupEnumValue;
         if (true === $this->hasCache($cacheId)) {
             return json_decode($this->getCache(), true);
         }
@@ -118,7 +119,7 @@ class DbHelper
                 CostFieldNameEnum::FROM_DATE => $dateFrom,
                 CostFieldNameEnum::TILL_DATE => $dateTill,
             ],
-            $isNeedCostGroup
+            $costGroupEnumValue
         );
 
         $data = $this->db->query($baseSql)->fetchAll();
@@ -165,7 +166,7 @@ class DbHelper
         return $selectSql . $fromSql . $whereSql;
     }
 
-    private function getCostBaseQuerySql(array $values = [], bool $isNeedCostGroup): string
+    private function getCostBaseQuerySql(array $values, int $costGroupEnumValue): string
     {
         $selectSql = "
             SELECT 
@@ -183,17 +184,29 @@ class DbHelper
 
         $whereSql = $this->createSqlWhere($values);
         $groupBySql = '';
-        if (true === $isNeedCostGroup) {
+        if (GroupCostEnum::WITHOUT_GROUP_BY !== $costGroupEnumValue) {
+            if (GroupCostEnum::GROUP_BY_WEEK === $costGroupEnumValue) {
+              $dateFormat = 'YEAR(fc.UF_DATE), MONTH(fc.UF_DATE), WEEK(fc.UF_DATE)';
+                $dateSelect = "YEAR(fc.UF_DATE) as year, MONTH(fc.UF_DATE) as month";
+            }
+
+            if (GroupCostEnum::GROUP_BY_MONTH === $costGroupEnumValue) {
+                $dateFormat = 'YEAR(fc.UF_DATE), MONTH(fc.UF_DATE)';
+                $dateSelect = "YEAR(fc.UF_DATE) as year, MONTH(fc.UF_DATE) as month";
+            }
+
             $selectSql = "
-                SELECT 
-                    DATE_FORMAT(fc.UF_DATE, '01-%m-%Y') as date_group_by,
+                SELECT
+                    {$dateSelect},
                     AVG(fc.UF_SHARE_COST) as share_cost,
                     AVG(fc.UF_ACCETS_COST) as accets_cost
             ";
             $groupBySql = "
-                GROUP BY DATE_FORMAT(fc.UF_DATE, '01-%m-%Y')
+                GROUP BY {$dateFormat}
             ";
-            $orderSql = '';
+            $orderSql = "
+                ORDER BY {$dateFormat} ASC
+            ";
         }
 
         return $selectSql . $fromSql . $whereSql . $groupBySql . $orderSql;
