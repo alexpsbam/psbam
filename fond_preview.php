@@ -1,9 +1,8 @@
 <?php
 require($_SERVER["DOCUMENT_ROOT"]."/bitrix/modules/main/include/prolog_before.php");
-//require($_SERVER["DOCUMENT_ROOT"]."/bitrix/header.php");
+
 use fund\Dto\FundDto;
 use fund\Enum\CostPeriodIdEnum;
-use fund\Helper\DateHelper;
 use fund\Helper\DbHelper;
 use fund\Service\FundService;
 
@@ -19,13 +18,13 @@ while ($ob = $res->GetNextElement()) {
         $fundCodeAll[$arFields['PROPERTY_CODE_VALUE']] = $arFields['PROPERTY_CODE_VALUE'];
     }
 }
+$dbHelper = new DbHelper('capitalig');
+$fundService = new FundService($dbHelper);
 
-$fundService = (new FundService(new DbHelper('capitalig')));
-$dateHelper = new DateHelper();
 /**
  * @var FundDto[] $fundDtos
  */
-$fundDtos = $fundService->getList([413]);
+$fundDtos = $fundService->getList($fundCodeAll);
 
 /**
  * DateTimeImmutable[] $dateListByKey
@@ -51,7 +50,7 @@ foreach ($fundDtos as $fundDto) {
         $structures[] = [
             'value' => $structureDto->getValue(),
             'sumValue' => $structureDto->getSumValue(),
-            'type' => $structureDto->getType(),
+            'type' => $structureDto->getTypeId(),
             'percent' => $structureDto->getPercent()
         ];
     }

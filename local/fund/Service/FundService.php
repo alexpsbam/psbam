@@ -13,6 +13,8 @@ use fund\Helper\DbHelper;
 
 class FundService
 {
+    private const DAYS_DIFF_LIMIT = 100;
+
     private DbHelper $dbHelper;
     private DateHelper $dateHelper;
 
@@ -39,7 +41,6 @@ class FundService
             if (true === $withStructure) {
                 $structureDtos = $this->getStructureByFundId((int) $fund['id']);
             }
-
             $fundDtos[] = $this->createFundDto($fund, $costDtos, $structureDtos);
         }
         return $fundDtos;
@@ -72,11 +73,21 @@ class FundService
         DateTimeImmutable $dateTill
     ): array {
         $costDtos = [];
-        $costs = $this->dbHelper->getCostByFundIdAndPeriod($fundId, $dateFrom, $dateTill);
+        $isNeedCostGroup = $this->isNeedCostGroup($dateFrom, $dateTill);
+        $costs = $this->dbHelper->getCostByFundIdAndPeriod($fundId, $dateFrom, $dateTill, $isNeedCostGroup);
         foreach ($costs as $cost) {
             $costDtos[] = $this->createCostDto($cost, null, null);
         }
         return $costDtos;
+    }
+
+    private function isNeedCostGroup(DateTimeImmutable $dateFrom, DateTimeImmutable $dateTill): bool
+    {
+        $days = abs(date_diff($dateFrom, $dateTill)->days);
+        if (self::DAYS_DIFF_LIMIT < $days) {
+            return true;
+        }
+        return false;
     }
 
     /**

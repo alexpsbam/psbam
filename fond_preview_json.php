@@ -1,8 +1,7 @@
 <?php
 require($_SERVER["DOCUMENT_ROOT"]."/bitrix/modules/main/include/prolog_before.php");
-use fund\Dto\FundDto;
+
 use fund\Enum\CostPeriodIdEnum;
-use fund\Helper\DateHelper;
 use fund\Helper\DbHelper;
 use fund\Service\FundService;
 
@@ -19,15 +18,17 @@ while ($ob = $res->GetNextElement()) {
     }
 }
 
-$fundService = (new FundService(new DbHelper('capitalig')));
-$dateHelper = new DateHelper();
-/**
- * @var FundDto[] $fundDtos
- */
+$dbHelper = new DbHelper('capitalig');
+$fundService = new FundService($dbHelper);
+
 $fundDtos = $fundService->getList($fundCodeAll);
 
+$dateFrom = new DateTimeImmutable(CostPeriodIdEnum::ALL[CostPeriodIdEnum::LAST_5_YEAR]);
+$dateTill = new DateTimeImmutable();
+
+$costDtos = [];
 foreach ($fundDtos as $fundDto) {
-    $costDtos[$fundDto->getFundId()] = $fundService->getCostByFundIdAndPeriod($fundDto->getFundId(), new DateTimeImmutable('-3 month'), new DateTimeImmutable());
+    $costDtos[$fundDto->getFundId()] = $fundService->getCostByFundIdAndPeriod($fundDto->getFundId(), $dateFrom, $dateTill);
 }
 
 header("Content-Type: application/json");
@@ -37,6 +38,10 @@ echo json_encode([
         'costs' => $costDtos
     ],
     'meta' => [
-        'dataTypeId' => CostPeriodIdEnum::ALL,
-    ]
+        'dataType' => $fundService->getDatesForCost(),
+        'period' => [
+            'dateFrom' => $dateFrom,
+            'dateTill' => $dateTill,
+        ],
+    ],
 ]);

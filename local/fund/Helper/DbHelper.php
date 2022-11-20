@@ -11,7 +11,7 @@ use fund\Enum\Db\CostFieldNameEnum;
 
 class DbHelper
 {
-    private const CACHE_TIME = 60 * 60;
+    private const CACHE_TIME = 60 * 60 * 24;
     private const SQL_WHERE = "WHERE 1 = 1";
 
     private Connection $db;
@@ -50,7 +50,7 @@ class DbHelper
     {
         sort($ufCodeIds);
 
-        $cacheId =  __METHOD__ . implode(',', $ufCodeIds);
+        $cacheId =  __METHOD__ . implode('.', $ufCodeIds);
         if (true === $this->hasCache($cacheId)) {
             return $this->getCache();
         }
@@ -91,10 +91,13 @@ class DbHelper
             return $this->getCache();
         }
 
-        $baseSql = $this->getCostBaseQuerySql([
-            'fc.UF_FUND_ID' => $fundId,
-            CostFieldNameEnum::TILL_DATE => $date,
-        ]);
+        $baseSql = $this->getCostBaseQuerySql(
+            [
+                'fc.UF_FUND_ID' => $fundId,
+                CostFieldNameEnum::TILL_DATE => $date,
+            ],
+            false
+        );
         $data = $this->db->query($baseSql, $limit = 1)->fetch();
         if (true === empty($data)) {
             $data = null;
@@ -103,20 +106,23 @@ class DbHelper
         return $data;
     }
 
-    public function getCostByFundIdAndPeriod(int $fundId, DateTimeImmutable $dateFrom, DateTimeImmutable $dateTill): array
+    public function getCostByFundIdAndPeriod(int $fundId, DateTimeImmutable $dateFrom, DateTimeImmutable $dateTill, bool $isNeedCostGroup = false): array
     {
-        $cacheId = __METHOD__ . '#'  . $fundId . '#' . $dateFrom->format('Ymd') . '#' . $dateTill->format('Ymd');
+        $cacheId = __METHOD__ . '#'  . $fundId . '#' . $dateFrom->format('Ymd') . '#' . $dateTill->format('Ymd') . '#' . (int) $isNeedCostGroup;
         if (true === $this->hasCache($cacheId)) {
-            return $this->getCache();
+            return json_decode($this->getCache(), true);
         }
-        $baseSql = $this->getCostBaseQuerySql([
-            'fc.UF_FUND_ID' => $fundId,
-            CostFieldNameEnum::FROM_DATE => $dateFrom,
-            CostFieldNameEnum::TILL_DATE => $dateTill,
-        ]);
+        $baseSql = $this->getCostBaseQuerySql(
+            [
+                'fc.UF_FUND_ID' => $fundId,
+                CostFieldNameEnum::FROM_DATE => $dateFrom,
+                CostFieldNameEnum::TILL_DATE => $dateTill,
+            ],
+            $isNeedCostGroup
+        );
 
         $data = $this->db->query($baseSql)->fetchAll();
-        $this->setCache($cacheId, $data);
+        $this->setCache($cacheId, json_encode($data));
         return $data;
     }
 
@@ -159,7 +165,7 @@ class DbHelper
         return $selectSql . $fromSql . $whereSql;
     }
 
-    private function getCostBaseQuerySql(array $values = []): string
+    private function getCostBaseQuerySql(array $values = [], bool $isNeedCostGroup): string
     {
         $selectSql = "
             SELECT 
@@ -171,14 +177,26 @@ class DbHelper
             FROM 
                    fund_costs fc
         ";
-
-        $whereSql = $this->createSqlWhere($values);
-
         $orderSql = "
             ORDER BY fc.UF_DATE DESC
         ";
 
-        return $selectSql . $fromSql . $whereSql . $orderSql;
+        $whereSql = $this->createSqlWhere($values);
+        $groupBySql = '';
+        if (true === $isNeedCostGroup) {
+            $selectSql = "
+                SELECT 
+                    DATE_FORMAT(fc.UF_DATE, '01-%m-%Y') as date_group_by,
+                    AVG(fc.UF_SHARE_COST) as share_cost,
+                    AVG(fc.UF_ACCETS_COST) as accets_cost
+            ";
+            $groupBySql = "
+                GROUP BY DATE_FORMAT(fc.UF_DATE, '01-%m-%Y')
+            ";
+            $orderSql = '';
+        }
+
+        return $selectSql . $fromSql . $whereSql . $groupBySql . $orderSql;
     }
 
     private function getStructreBaseQuerySql(array $values = []): string
