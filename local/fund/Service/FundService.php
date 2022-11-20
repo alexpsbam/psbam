@@ -235,16 +235,18 @@ class FundService
      */
     private function createStructureDto(?array $structure, float $sumValue): StructureDto
     {
-        $value = $structure['value'] ?? null;
-        $typeId = $structure['type_id'] ?? null;
+        $value = (float) $structure['value'] ?? null;
+        $typeId = (int) $structure['type_id'] ?? null;
+        $title = (string) $structure['title'] ?? null;
         $percent = null;
 
         if (null != $sumValue) {
             $percent = abs($value / $sumValue * 100);
         }
         return new StructureDto(
-            (float) $value,
-            (int) $typeId,
+            $title,
+            $value,
+            $typeId,
             $sumValue,
             $percent
         );

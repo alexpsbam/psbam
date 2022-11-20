@@ -7,20 +7,26 @@ use JsonSerializable;
 
 class StructureDto implements JsonSerializable
 {
-    private float $value;
+    private ?string $title;
+    private ?float $value;
     private int $typeId;
     private float $sumValue;
     private ?float $percent;
 
-    public function __construct(float $value, int $typeId, float $sumValue, ?float $percent = null)
+    public function __construct(?string $title, ?float $value, int $typeId, float $sumValue, ?float $percent = null)
     {
+        $this->title = $title;
         $this->value = $value;
         $this->typeId = $typeId;
         $this->sumValue = $sumValue;
         $this->percent = $percent;
     }
+    public function getTitle(): ?string
+    {
+        return $this->title;
+    }
 
-    public function getValue(): float
+    public function getValue(): ?float
     {
         return $this->value;
     }
@@ -43,6 +49,7 @@ class StructureDto implements JsonSerializable
     public function jsonSerialize()
     {
         return [
+                'title' => $this->getTitle(),
                 'value' => $this->getValue(),
                 'typeId' => $this->getTypeId(),
                 'sumValue' => $this->getSumValue(),
