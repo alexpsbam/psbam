@@ -31,7 +31,7 @@ class DateHelper
     /**
      * @return DateTimeImmutable
      */
-    public function getDateTillByPeriodId(int $periodId, DateTimeImmutable $dateFrom): DateTimeImmutable
+    public function getDateFromByPeriodId(int $periodId, DateTimeImmutable $dateFrom): DateTimeImmutable
     {
         if (true === key_exists($periodId, CostPeriodIdEnum::PERIODS)) {
             return $dateFrom->modify(CostPeriodIdEnum::PERIODS[$periodId]);

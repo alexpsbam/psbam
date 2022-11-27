@@ -113,7 +113,7 @@ class FundService
         DateTimeImmutable $dateTill
     ): array {
         $costDtos = [];
-        $dateFrom = $this->dateHelper->getDateTillByPeriodId($periodId, $dateTill);
+        $dateFrom = $this->dateHelper->getDateFromByPeriodId($periodId, $dateTill);
         $costs = $this->dbHelper->getCostByFundIdAndPeriod($fundId, $dateFrom, $dateTill);
         foreach ($costs as $cost) {
             $costDtos[] = $this->createCostDto($cost, null, null);
